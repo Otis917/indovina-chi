@@ -3,33 +3,30 @@ from PIL import Image, ImageEnhance
 import random
 import os
 
-# --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(page_title="Indovina Chi? 2025", layout="wide")
+# --- 1. CONFIGURAZIONE PAGINA ---
+st.set_page_config(page_title="Indovina Chi?", layout="wide")
 
-# CSS per rendere le scritte centrate e gestire lo stile
+# CSS per avvicinare immagine e bottone e centrare tutto
 st.markdown("""
     <style>
-    .main { background-color: #121212; }
     div.stButton > button {
-        border: none;
-        padding: 0px;
-        background: transparent;
-    }
-    .nome-personaggio {
-        text-align: center;
+        width: 100%;
+        margin-top: -10px; /* Avvicina il bottone all'immagine */
         font-weight: bold;
-        font-size: 18px;
-        margin-bottom: 10px;
+    }
+    img {
+        border-radius: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONFIGURAZIONE GIOCO ---
+# --- 2. CONFIGURAZIONE DATI ---
+# ATTENZIONE: I nomi qui devono essere IDENTICI ai nomi dei file (senza .jpg)
 PERSONAGGI = ["Ai Hayasaka", "Amo", "Nagi Arato", "Ouguri Cup"]
-COLONNE = 4  # Almeno 4 per riga come richiesto
-TARGET_SIZE = (300, 300) # Dimensione fissa per uniformità
+COLONNE = 4  # 4 Immagini per riga
+DIMENSIONE_IMG = (200, 200) # Rimpicciolite e quadrate
 
-# --- INIZIALIZZAZIONE STATO ---
+# --- 3. INIZIALIZZAZIONE MEMORIA ---
 if 'segreto' not in st.session_state:
     st.session_state.segreto = random.choice(PERSONAGGI)
 if 'oscurati' not in st.session_state:
@@ -39,60 +36,82 @@ def reset_gioco():
     st.session_state.segreto = random.choice(PERSONAGGI)
     st.session_state.oscurati = {nome: False for nome in PERSONAGGI}
 
-# --- LOGICA IMMAGINI (CON CONTROLLO ESTENSIONI) ---
-def get_immagine(nome, oscurato):
+# --- 4. FUNZIONE CARICAMENTO IMMAGINI ---
+def carica_immagine(nome, oscurato):
+    # Cerca l'immagine con varie estensioni
+    trovata = False
     img = None
-    # Prova diverse estensioni come nel tuo codice originale
-    for ext in [".png", ".jpg", ".jpeg", ".PNG", ".JPG"]:
-        path = f"immagini/{nome}{ext}"
-        if os.path.exists(path):
+    
+    # Lista estensioni possibili
+    estensioni = [".jpg", ".png", ".jpeg", ".JPG", ".PNG"]
+    
+    for ext in estensioni:
+        percorso = f"immagini/{nome}{ext}"
+        if os.path.exists(percorso):
             try:
-                img = Image.open(path).convert("RGB")
+                img = Image.open(percorso).convert("RGB")
+                trovata = True
                 break
             except:
                 continue
     
-    if img:
-        # Forza la dimensione uguale per tutti
-        img = img.resize(TARGET_SIZE, Image.Resampling.LANCZOS)
-        if oscurato:
-            enhancer = ImageEnhance.Brightness(img)
-            img = enhancer.enhance(0.3) # Scurisce l'immagine
-        return img
-    else:
-        # Se non trova l'immagine, crea un rettangolo grigio della stessa dimensione
-        return Image.new('RGB', TARGET_SIZE, color = (50, 50, 50))
+    # Se non trova l'immagine, crea un quadrato colorato con il nome dentro
+    if not trovata:
+        return None 
 
-# --- UI INTERFACCIA ---
+    # Ridimensiona per averle tutte uguali
+    img = img.resize(DIMENSIONE_IMG, Image.Resampling.LANCZOS)
+    
+    # Se deve essere scura
+    if oscurato:
+        enhancer = ImageEnhance.Brightness(img)
+        img = enhancer.enhance(0.2) # Molto scura (20% luminosità)
+        
+    return img
+
+# --- 5. INTERFACCIA ---
 st.title("🕵️ Indovina Chi?")
-st.subheader(f"Il tuo personaggio segreto è: :orange[{st.session_state.segreto.upper()}]")
 
-# Griglia Personaggi
+# Controllo se la cartella esiste (DEBUG)
+if not os.path.exists("immagini"):
+    st.error("⚠️ ERRORE GRAVE: Non trovo la cartella 'immagini'. Assicurati di aver creato una cartella chiamata esattamente 'immagini' (tutto minuscolo) accanto al file app.py")
+else:
+    # Se la cartella c'è, controlliamo se è vuota
+    files = os.listdir("immagini")
+    if not files:
+        st.warning("⚠️ La cartella 'immagini' è vuota!")
+
+st.markdown(f"### Personaggio Segreto: :orange[{st.session_state.segreto}]")
+
+# Creazione Griglia
 cols = st.columns(COLONNE)
 
 for i, nome in enumerate(PERSONAGGI):
     col_idx = i % COLONNE
     with cols[col_idx]:
+        
+        # Recupera stato
         is_dark = st.session_state.oscurati[nome]
-        img_display = get_immagine(nome, is_dark)
         
-        # Mostra l'immagine. In Streamlit, per rendere cliccabile 
-        # l'immagine usiamo il parametro 'on_click' di un button che la contiene
-        # o usiamo un button subito sotto che funge da interruttore
-        st.image(img_display, use_container_width=True)
+        # Recupera Immagine
+        img = carica_immagine(nome, is_dark)
         
-        # Colore del nome: se oscurato diventa grigio scuro
-        nome_colore = "#444" if is_dark else "#FFF"
-        st.markdown(f'<p class="nome-personaggio" style="color: {nome_colore};">{nome.upper()}</p>', unsafe_allow_html=True)
+        if img:
+            st.image(img, use_container_width=True)
+        else:
+            # Messaggio di errore se l'immagine specifica non si trova
+            st.error(f"Manca: {nome}")
         
-        # Bottone invisibile o piccolo per gestire il click
-        label_btn = "RIPRISTINA" if is_dark else "ELIMINA"
-        if st.button(label_btn, key=f"btn_{nome}", use_container_width=True):
+        # IL BOTTONE FUNGE DA CLICK SULL'IMMAGINE
+        # Se è normale mostra il nome, se è scuro mostra una X
+        testo_bottone = nome if not is_dark else "❌ " + nome
+        
+        # Se clicchi il bottone, cambi lo stato
+        if st.button(testo_bottone, key=nome):
             st.session_state.oscurati[nome] = not st.session_state.oscurati[nome]
             st.rerun()
 
-st.divider()
-
-if st.button("🔄 NUOVA PARTITA / RESET", use_container_width=True, type="primary"):
+st.markdown("---")
+if st.button("🔄 NUOVA PARTITA", type="primary", use_container_width=True):
     reset_gioco()
     st.rerun()
