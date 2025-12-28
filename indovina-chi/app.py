@@ -1,22 +1,33 @@
 import streamlit as st
 from PIL import Image, ImageEnhance
 import random
+import os
 
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Indovina Chi? 2025", layout="wide")
 
-# Personalizzazione CSS per il tema scuro e lo stile dei box
+# CSS per rendere le scritte centrate e gestire lo stile
 st.markdown("""
     <style>
     .main { background-color: #121212; }
-    .stButton>button { width: 100%; border-radius: 10px; border: none; }
-    .char-label { text-align: center; font-weight: bold; margin-top: 5px; }
+    div.stButton > button {
+        border: none;
+        padding: 0px;
+        background: transparent;
+    }
+    .nome-personaggio {
+        text-align: center;
+        font-weight: bold;
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # --- CONFIGURAZIONE GIOCO ---
 PERSONAGGI = ["Ai Hayasaka", "Amo", "Nagi Arato", "Ouguri Cup"]
-COLONNE = 2  # Su cellulare 2 colonne sono meglio di 4
+COLONNE = 4  # Almeno 4 per riga come richiesto
+TARGET_SIZE = (300, 300) # Dimensione fissa per uniformità
 
 # --- INIZIALIZZAZIONE STATO ---
 if 'segreto' not in st.session_state:
@@ -28,22 +39,33 @@ def reset_gioco():
     st.session_state.segreto = random.choice(PERSONAGGI)
     st.session_state.oscurati = {nome: False for nome in PERSONAGGI}
 
-# --- LOGICA IMMAGINI ---
+# --- LOGICA IMMAGINI (CON CONTROLLO ESTENSIONI) ---
 def get_immagine(nome, oscurato):
-    path = f"immagini/{nome}.jpg" # Assicurati che le estensioni coincidano
-    try:
-        img = Image.open(path).convert("RGB")
+    img = None
+    # Prova diverse estensioni come nel tuo codice originale
+    for ext in [".png", ".jpg", ".jpeg", ".PNG", ".JPG"]:
+        path = f"immagini/{nome}{ext}"
+        if os.path.exists(path):
+            try:
+                img = Image.open(path).convert("RGB")
+                break
+            except:
+                continue
+    
+    if img:
+        # Forza la dimensione uguale per tutti
+        img = img.resize(TARGET_SIZE, Image.Resampling.LANCZOS)
         if oscurato:
             enhancer = ImageEnhance.Brightness(img)
-            img = enhancer.enhance(0.2) # Molto scuro
+            img = enhancer.enhance(0.3) # Scurisce l'immagine
         return img
-    except:
-        # Placeholder se l'immagine manca
-        return Image.new('RGB', (300, 300), color = (100, 100, 100))
+    else:
+        # Se non trova l'immagine, crea un rettangolo grigio della stessa dimensione
+        return Image.new('RGB', TARGET_SIZE, color = (50, 50, 50))
 
 # --- UI INTERFACCIA ---
 st.title("🕵️ Indovina Chi?")
-st.subheader(f"Il tuo personaggio segreto è: :blue[{st.session_state.segreto.upper()}]")
+st.subheader(f"Il tuo personaggio segreto è: :orange[{st.session_state.segreto.upper()}]")
 
 # Griglia Personaggi
 cols = st.columns(COLONNE)
@@ -51,21 +73,26 @@ cols = st.columns(COLONNE)
 for i, nome in enumerate(PERSONAGGI):
     col_idx = i % COLONNE
     with cols[col_idx]:
-        # Carica l'immagine in base allo stato
         is_dark = st.session_state.oscurati[nome]
         img_display = get_immagine(nome, is_dark)
         
+        # Mostra l'immagine. In Streamlit, per rendere cliccabile 
+        # l'immagine usiamo il parametro 'on_click' di un button che la contiene
+        # o usiamo un button subito sotto che funge da interruttore
         st.image(img_display, use_container_width=True)
         
-        # Bottone per alternare lo stato
-        label = f"✅ Attivo: {nome}" if not is_dark else f"❌ Escluso: {nome}"
-        if st.button(label, key=nome):
+        # Colore del nome: se oscurato diventa grigio scuro
+        nome_colore = "#444" if is_dark else "#FFF"
+        st.markdown(f'<p class="nome-personaggio" style="color: {nome_colore};">{nome.upper()}</p>', unsafe_allow_html=True)
+        
+        # Bottone invisibile o piccolo per gestire il click
+        label_btn = "RIPRISTINA" if is_dark else "ELIMINA"
+        if st.button(label_btn, key=f"btn_{nome}", use_container_width=True):
             st.session_state.oscurati[nome] = not st.session_state.oscurati[nome]
             st.rerun()
 
 st.divider()
 
-# Bottone Reset
 if st.button("🔄 NUOVA PARTITA / RESET", use_container_width=True, type="primary"):
     reset_gioco()
     st.rerun()
