@@ -160,12 +160,11 @@ else:
 
     st.divider()
     
-    col_reset, col_back = st.columns(2)
-    with col_reset:
-        if st.button("🔄 RESET PARTITA (Cambia Segreto)", use_container_width=True):
+    col_cambia, col_back = st.columns(2)
+    
+    with col_cambia:
+        if st.button("🔄 CAMBIA PERSONAGGIO SEGRETO", use_container_width=True):
             st.session_state.segreto = random.choice(st.session_state.lista_attuale)
-            st.session_state.oscurati = {n: False for n in st.session_state.lista_attuale}
-            st.session_state.ultimo_click = 0
             st.rerun()
             
     with col_back:
