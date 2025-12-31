@@ -68,7 +68,7 @@ if st.session_state.tabella_selezionata is None:
     col_a, col_b = st.columns(2)
     
     with col_a:
-        if st.button("📂 GIOCA CON TABELLA", use_container_width=True):
+        if st.button("📂 GIOCA CON TABELLA 1", use_container_width=True):
             st.session_state.tabella_selezionata = "immagini_1"
             st.session_state.lista_attuale = PERSONAGGI_1
             st.session_state.segreto = random.choice(PERSONAGGI_1)
@@ -76,7 +76,7 @@ if st.session_state.tabella_selezionata is None:
             st.rerun()
             
     with col_b:
-        if st.button("📂 GIOCA CON TABELLA", use_container_width=True):
+        if st.button("📂 GIOCA CON TABELLA 2", use_container_width=True):
             st.session_state.tabella_selezionata = "immagini_2"
             st.session_state.lista_attuale = PERSONAGGI_2
             st.session_state.segreto = random.choice(PERSONAGGI_2)
@@ -119,4 +119,5 @@ else:
             # Reset totale per tornare alla scelta iniziale
             st.session_state.tabella_selezionata = None
             st.session_state.lista_attuale = []
+
             st.rerun()
