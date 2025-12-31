@@ -2,6 +2,8 @@ import streamlit as st
 from PIL import Image, ImageEnhance
 import random
 import os
+from functools import lru_cache
+import time
 
 # 1. Configurazione
 st.set_page_config(page_title="Indovina Chi?", layout="wide")
@@ -32,13 +34,18 @@ if 'segreto' not in st.session_state:
     st.session_state.segreto = None
 if 'oscurati' not in st.session_state:
     st.session_state.oscurati = {}
+if 'ultimo_click' not in st.session_state:  # Per rate limiter
+    st.session_state.ultimo_click = 0
 
-# 5. Funzione Caricamento Immagine
-def ottieni_immagine(nome, oscurato, cartella):
+# 5. Cache per le immagini
+@st.cache_data(ttl=3600)  # Cache per 1 ora
+def ottieni_immagine_cached(nome, oscurato, cartella):
+    """Versione cached della funzione per ottenere immagini"""
     img = None
     estensioni = [".jpg", ".png", ".jpeg", ".JPG", ".PNG"]
     percorso_cartella = os.path.join(BASE_DIR, cartella)
     
+    # Prima prova con il nome esatto
     for ext in estensioni:
         path = os.path.join(percorso_cartella, f"{nome}{ext}")
         if os.path.exists(path):
@@ -48,6 +55,7 @@ def ottieni_immagine(nome, oscurato, cartella):
             except:
                 continue
     
+    # Fallback: immagine grigia
     if img is None:
         img = Image.new('RGB', (300, 300), color=(70, 70, 70))
     
@@ -56,7 +64,56 @@ def ottieni_immagine(nome, oscurato, cartella):
     if oscurato:
         enhancer = ImageEnhance.Brightness(img)
         img = enhancer.enhance(0.2)
+    
     return img
+
+# 6. Pre-caricamento delle immagini
+@st.cache_resource
+def preload_all_images():
+    """Pre-carica tutte le immagini possibili"""
+    cartelle = ["immagini_1", "immagini_2"]
+    tutte_immagini = {}
+    
+    for cartella in cartelle:
+        percorso_cartella = os.path.join(BASE_DIR, cartella)
+        if not os.path.exists(percorso_cartella):
+            continue
+            
+        # Determina quale lista di personaggi usare
+        lista_personaggi = PERSONAGGI_1 if cartella == "immagini_1" else PERSONAGGI_2
+        
+        for nome in lista_personaggi:
+            # Carica versione chiara e scura
+            try:
+                img_chiara = ottieni_immagine_cached(nome, False, cartella)
+                img_scura = ottieni_immagine_cached(nome, True, cartella)
+                tutte_immagini[f"{cartella}/{nome}/chiara"] = img_chiara
+                tutte_immagini[f"{cartella}/{nome}/scura"] = img_scura
+            except Exception as e:
+                continue
+                
+    return tutte_immagini
+
+# 7. Callback per toggle personaggio con rate limiter
+def toggle_personaggio(nome):
+    """Callback per alternare oscuramento personaggio con rate limiting"""
+    tempo_attuale = time.time()
+    
+    # Rate limiter: 0.5 secondi tra i click
+    if tempo_attuale - st.session_state.ultimo_click < 0.5:
+        st.warning("⏳ Troppi click rapidi! Aspetta un attimo.")
+        return
+    
+    st.session_state.ultimo_click = tempo_attuale
+    st.session_state.oscurati[nome] = not st.session_state.oscurati.get(nome, False)
+
+# 8. Funzione per ottenere immagine (usa cache e preload)
+def ottieni_immagine(nome, oscurato, cartella):
+    """Funzione principale per ottenere immagini (usa cache)"""
+    return ottieni_immagine_cached(nome, oscurato, cartella)
+
+# Pre-carica le immagini all'avvio (viene eseguito una volta)
+preload_all_images()
 
 # --- LOGICA DI NAVIGAZIONE ---
 
@@ -73,6 +130,7 @@ if st.session_state.tabella_selezionata is None:
             st.session_state.lista_attuale = PERSONAGGI_1
             st.session_state.segreto = random.choice(PERSONAGGI_1)
             st.session_state.oscurati = {n: False for n in PERSONAGGI_1}
+            st.session_state.ultimo_click = 0
             st.rerun()
             
     with col_b:
@@ -81,6 +139,7 @@ if st.session_state.tabella_selezionata is None:
             st.session_state.lista_attuale = PERSONAGGI_2
             st.session_state.segreto = random.choice(PERSONAGGI_2)
             st.session_state.oscurati = {n: False for n in PERSONAGGI_2}
+            st.session_state.ultimo_click = 0
             st.rerun()
 
 # SCHERMATA DI GIOCO
@@ -89,8 +148,12 @@ else:
     st.caption(f"Stai usando la cartella: {st.session_state.tabella_selezionata}")
     
     st.write(f"Il tuo personaggio segreto: **{st.session_state.segreto}**")
+    
+    # Contatore personaggi oscurati
+    oscurati_count = sum(st.session_state.oscurati.values())
+    st.write(f"Personaggi oscurati: {oscurati_count}/{len(st.session_state.lista_attuale)}")
 
-    # --- MODIFICA PER MOBILE: Griglia a 3 colonne (o 2 se preferisci più grandi) ---
+    # --- Griglia a 3 colonne ---
     N_COLONNE = 3 
     rows = [st.session_state.lista_attuale[i:i + N_COLONNE] for i in range(0, len(st.session_state.lista_attuale), N_COLONNE)]
     
@@ -103,10 +166,17 @@ else:
                 
                 st.image(img, use_container_width=True)
                 
-                label = nome if not is_dark else f"❌" # Testo corto per non rompere il layout
-                if st.button(label, key=f"btn_{nome}", use_container_width=True):
-                    st.session_state.oscurati[nome] = not st.session_state.oscurati[nome]
-                    st.rerun()
+                label = nome if not is_dark else f"❌ {nome}"
+                
+                # Bottone con callback e rate limiter integrato
+                st.button(
+                    label, 
+                    key=f"btn_{nome}", 
+                    use_container_width=True,
+                    on_click=toggle_personaggio,
+                    args=(nome,),
+                    type="secondary" if is_dark else "primary"
+                )
 
     st.divider()
     
@@ -115,6 +185,7 @@ else:
         if st.button("🔄 RESET PARTITA (Cambia Segreto)", use_container_width=True):
             st.session_state.segreto = random.choice(st.session_state.lista_attuale)
             st.session_state.oscurati = {n: False for n in st.session_state.lista_attuale}
+            st.session_state.ultimo_click = 0
             st.rerun()
             
     with col_back:
@@ -122,6 +193,5 @@ else:
             # Reset totale per tornare alla scelta iniziale
             st.session_state.tabella_selezionata = None
             st.session_state.lista_attuale = []
-
+            st.session_state.ultimo_click = 0
             st.rerun()
-
