@@ -90,20 +90,23 @@ else:
     
     st.write(f"Il tuo personaggio segreto: **{st.session_state.segreto}**")
 
-    # Griglia dinamica basata sulla lista attuale
-    cols = st.columns(len(st.session_state.lista_attuale))
+    # --- MODIFICA PER MOBILE: Griglia a 3 colonne (o 2 se preferisci più grandi) ---
+    N_COLONNE = 3 
+    rows = [st.session_state.lista_attuale[i:i + N_COLONNE] for i in range(0, len(st.session_state.lista_attuale), N_COLONNE)]
     
-    for i, nome in enumerate(st.session_state.lista_attuale):
-        with cols[i]:
-            is_dark = st.session_state.oscurati.get(nome, False)
-            img = ottieni_immagine(nome, is_dark, st.session_state.tabella_selezionata)
-            
-            st.image(img, use_container_width=True)
-            
-            label = nome if not is_dark else f"❌ {nome}"
-            if st.button(label, key=f"btn_{nome}"):
-                st.session_state.oscurati[nome] = not st.session_state.oscurati[nome]
-                st.rerun()
+    for row in rows:
+        cols = st.columns(N_COLONNE)
+        for i, nome in enumerate(row):
+            with cols[i]:
+                is_dark = st.session_state.oscurati.get(nome, False)
+                img = ottieni_immagine(nome, is_dark, st.session_state.tabella_selezionata)
+                
+                st.image(img, use_container_width=True)
+                
+                label = nome if not is_dark else f"❌" # Testo corto per non rompere il layout
+                if st.button(label, key=f"btn_{nome}", use_container_width=True):
+                    st.session_state.oscurati[nome] = not st.session_state.oscurati[nome]
+                    st.rerun()
 
     st.divider()
     
@@ -121,3 +124,4 @@ else:
             st.session_state.lista_attuale = []
 
             st.rerun()
+
